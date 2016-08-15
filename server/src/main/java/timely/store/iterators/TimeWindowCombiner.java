@@ -33,7 +33,6 @@ import org.apache.accumulo.core.client.ScannerBase;
 import org.apache.accumulo.core.conf.AccumuloConfiguration;
 import org.apache.accumulo.core.data.ByteSequence;
 import org.apache.accumulo.core.data.Key;
-import org.apache.accumulo.core.data.PartialKey;
 import org.apache.accumulo.core.data.Range;
 import org.apache.accumulo.core.data.Value;
 import org.apache.accumulo.core.iterators.IteratorEnvironment;
@@ -261,14 +260,19 @@ public abstract class TimeWindowCombiner implements SortedKeyValueIterator<Key, 
         findTop();
 
         if (range.getStartKey() != null) {
-            while (hasTop() && getTopKey().equals(range.getStartKey(), PartialKey.ROW_COLFAM_COLQUAL_COLVIS)
-                    && getTopKey().getTimestamp() > range.getStartKey().getTimestamp()) {
+            while (hasTop() && !range.contains(getTopKey())) {
                 next();
             }
-
-            while (hasTop() && range.beforeStartKey(getTopKey())) {
-                next();
-            }
+            // while (hasTop() && getTopKey().equals(range.getStartKey(),
+            // PartialKey.ROW_COLFAM_COLQUAL_COLVIS)
+            // && getTopKey().getTimestamp() >
+            // range.getStartKey().getTimestamp()) {
+            // next();
+            // }
+            //
+            // while (hasTop() && range.beforeStartKey(getTopKey())) {
+            // next();
+            // }
         }
     }
 

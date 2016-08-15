@@ -34,14 +34,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 @WebSocket(operation = "put")
 public class Metric implements TcpRequest, HttpPostRequest, WebSocketRequest {
 
-    private static final ThreadLocal<ByteBuffer> WRITE_BUFFER = new ThreadLocal<ByteBuffer>() {
-
-        @Override
-        protected ByteBuffer initialValue() {
-            return ByteBuffer.allocate(Double.BYTES);
-        }
-    };
-    private static final ThreadLocal<ByteBuffer> READ_BUFFER = new ThreadLocal<ByteBuffer>() {
+    private static final ThreadLocal<ByteBuffer> BUFFER = new ThreadLocal<ByteBuffer>() {
 
         @Override
         protected ByteBuffer initialValue() {
@@ -122,9 +115,9 @@ public class Metric implements TcpRequest, HttpPostRequest, WebSocketRequest {
 
     public Mutation toMutation() {
         final byte[] row = rowCoder.encode(new ComparablePair<String, Long>(this.metric, this.timestamp));
-        WRITE_BUFFER.get().clear();
-        WRITE_BUFFER.get().putDouble(this.value);
-        final Value value = new Value(WRITE_BUFFER.get().array());
+        BUFFER.get().clear();
+        BUFFER.get().putDouble(this.value);
+        final Value value = new Value(BUFFER.get().array());
         final Mutation m = new Mutation(row);
         Collections.sort(tags);
         for (final Tag entry : tags) {
@@ -144,10 +137,10 @@ public class Metric implements TcpRequest, HttpPostRequest, WebSocketRequest {
 
     public static Metric parse(Key k, Value v) {
         ComparablePair<String, Long> row = rowCoder.decode(k.getRow().getBytes());
-        READ_BUFFER.get().clear();
-        READ_BUFFER.get().put(v.get());
-        READ_BUFFER.get().position(0);
-        Double value = READ_BUFFER.get().getDouble();
+        BUFFER.get().clear();
+        BUFFER.get().put(v.get(), 0, v.getSize());
+        BUFFER.get().position(0);
+        Double value = BUFFER.get().getDouble();
         Metric m = new Metric();
         m.setMetric(row.getFirst());
         m.setTimestamp(row.getSecond());
