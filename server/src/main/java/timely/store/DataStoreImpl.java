@@ -1,6 +1,5 @@
 package timely.store;
 
-import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.apache.accumulo.core.conf.AccumuloConfiguration.getMemoryInBytes;
 import static org.apache.accumulo.core.conf.AccumuloConfiguration.getTimeInMillis;
 import io.netty.handler.codec.http.HttpResponseStatus;
@@ -52,7 +51,6 @@ import org.apache.accumulo.core.data.PartialKey;
 import org.apache.accumulo.core.data.Range;
 import org.apache.accumulo.core.data.Value;
 import org.apache.accumulo.core.iterators.IteratorUtil.IteratorScope;
-import org.apache.accumulo.core.iterators.user.AgeOffFilter;
 import org.apache.accumulo.core.iterators.user.RegExFilter;
 import org.apache.accumulo.core.security.Authorizations;
 import org.apache.accumulo.core.util.Pair;
@@ -69,15 +67,15 @@ import timely.api.model.Metric;
 import timely.api.model.Tag;
 import timely.api.request.AuthenticatedRequest;
 import timely.api.request.timeseries.QueryRequest;
-import timely.api.request.timeseries.SearchLookupRequest;
-import timely.api.request.timeseries.SuggestRequest;
 import timely.api.request.timeseries.QueryRequest.RateOption;
 import timely.api.request.timeseries.QueryRequest.SubQuery;
+import timely.api.request.timeseries.SearchLookupRequest;
+import timely.api.request.timeseries.SuggestRequest;
 import timely.api.response.TimelyException;
 import timely.api.response.timeseries.QueryResponse;
 import timely.api.response.timeseries.SearchLookupResponse;
-import timely.api.response.timeseries.SuggestResponse;
 import timely.api.response.timeseries.SearchLookupResponse.Result;
+import timely.api.response.timeseries.SuggestResponse;
 import timely.auth.AuthCache;
 import timely.sample.Aggregator;
 import timely.sample.Downsample;
@@ -113,7 +111,6 @@ public class DataStoreImpl implements DataStore {
 
     }
 
-    Configuration conf;
     private final Connector connector;
     private MetaCache metaCache = null;
     private final AtomicLong lastCountTime = new AtomicLong(System.currentTimeMillis());
@@ -133,27 +130,21 @@ public class DataStoreImpl implements DataStore {
 
         try {
             final BaseConfiguration apacheConf = new BaseConfiguration();
-            apacheConf.setProperty("instance.name", conf.get(Configuration.INSTANCE_NAME));
-            apacheConf.setProperty("instance.zookeeper.host", conf.get(Configuration.ZOOKEEPERS));
+            Configuration.Accumulo accumuloConf = conf.getAccumulo();
+            apacheConf.setProperty("instance.name", accumuloConf.getInstanceName());
+            apacheConf.setProperty("instance.zookeeper.host", accumuloConf.getZookeepers());
             final ClientConfiguration aconf = new ClientConfiguration(Collections.singletonList(apacheConf));
             final Instance instance = new ZooKeeperInstance(aconf);
-            final byte[] passwd = conf.get(Configuration.PASSWORD).getBytes(UTF_8);
-            connector = instance.getConnector(conf.get(Configuration.USERNAME), new PasswordToken(passwd));
+            connector = instance
+                    .getConnector(accumuloConf.getUsername(), new PasswordToken(accumuloConf.getPassword()));
             bwConfig = new BatchWriterConfig();
-            bwConfig.setMaxLatency(getTimeInMillis(conf.get(Configuration.MAX_LATENCY)), TimeUnit.MILLISECONDS);
-            bwConfig.setMaxMemory(getMemoryInBytes(conf.get(Configuration.WRITE_BUFFER_SIZE)) / numWriteThreads);
-            bwConfig.setMaxWriteThreads(Integer.parseInt(conf.get(Configuration.WRITE_THREADS)));
-            scannerThreads = Integer.parseInt(conf.get(Configuration.SCANNER_THREADS));
-            anonAccessAllowed = conf.getBoolean(Configuration.ALLOW_ANONYMOUS_ACCESS);
+            bwConfig.setMaxLatency(getTimeInMillis(accumuloConf.getWrite().getLatency()), TimeUnit.MILLISECONDS);
+            bwConfig.setMaxMemory(getMemoryInBytes(accumuloConf.getWrite().getBufferSize()) / numWriteThreads);
+            bwConfig.setMaxWriteThreads(accumuloConf.getWrite().getThreads());
+            scannerThreads = accumuloConf.getScan().getThreads();
+            anonAccessAllowed = conf.getSecurity().isAllowAnonymousAccess();
 
-            String ageoff = Long.toString(Integer.parseInt(conf.get(Configuration.METRICS_AGEOFF_DAYS)) * 86400000L);
-            Map<String, String> ageOffOptions = new HashMap<>();
-            ageOffOptions.put("ttl", ageoff);
-            IteratorSetting ageOffIteratorSettings = new IteratorSetting(100, "ageoff", AgeOffFilter.class,
-                    ageOffOptions);
-            EnumSet<IteratorScope> ageOffIteratorScope = EnumSet.allOf(IteratorScope.class);
-
-            metricsTable = conf.get(Configuration.METRICS_TABLE);
+            metricsTable = conf.getMetricsTable();
             if (metricsTable.contains(".")) {
                 final String[] parts = metricsTable.split("\\.", 2);
                 final String namespace = parts[0];
@@ -171,36 +162,25 @@ public class DataStoreImpl implements DataStore {
                 try {
                     LOG.info("Creating table " + metricsTable);
                     connector.tableOperations().create(metricsTable);
-                    connector.tableOperations().attachIterator(metricsTable, ageOffIteratorSettings,
-                            ageOffIteratorScope);
                 } catch (final TableExistsException ex) {
                     // don't care
                 }
-            } else {
-                for (IteratorScope scope : IteratorScope.values()) {
-                    if (connector.tableOperations().getIteratorSetting(metricsTable, "ageoff", scope) == null) {
-                        connector.tableOperations().attachIterator(metricsTable, ageOffIteratorSettings,
-                                EnumSet.of(scope));
-                    }
-                }
             }
-            metaTable = conf.get(Configuration.META_TABLE);
+            this.removeAgeOffIterators(connector, metricsTable);
+            this.applyAgeOffIterator(connector, metricsTable, conf);
+
+            metaTable = conf.getMetaTable();
             if (!tableIdMap.containsKey(metaTable)) {
                 try {
                     LOG.info("Creating table " + metaTable);
                     connector.tableOperations().create(metaTable);
-                    connector.tableOperations().attachIterator(metaTable, ageOffIteratorSettings, ageOffIteratorScope);
                 } catch (final TableExistsException ex) {
                     // don't care
                 }
-            } else {
-                for (IteratorScope scope : IteratorScope.values()) {
-                    if (connector.tableOperations().getIteratorSetting(metaTable, "ageoff", scope) == null) {
-                        connector.tableOperations()
-                                .attachIterator(metaTable, ageOffIteratorSettings, EnumSet.of(scope));
-                    }
-                }
             }
+            this.removeAgeOffIterators(connector, metaTable);
+            this.applyAgeOffIterator(connector, metaTable, conf);
+
             internalMetricsTimer.schedule(new TimerTask() {
 
                 @Override
@@ -214,6 +194,29 @@ public class DataStoreImpl implements DataStore {
             throw new TimelyException(HttpResponseStatus.INTERNAL_SERVER_ERROR.code(), "Error creating DataStoreImpl",
                     e.getMessage(), e);
         }
+    }
+
+    private static final EnumSet<IteratorScope> AGEOFF_SCOPES = EnumSet.allOf(IteratorScope.class);
+
+    private void removeAgeOffIterators(Connector con, String tableName) throws Exception {
+        Map<String, EnumSet<IteratorScope>> iters = con.tableOperations().listIterators(tableName);
+        for (String name : iters.keySet()) {
+            if (name.startsWith("ageoff")) {
+                con.tableOperations().removeIterator(tableName, name, AGEOFF_SCOPES);
+            }
+        }
+    }
+
+    private void applyAgeOffIterator(Connector con, String tableName, Configuration config) throws Exception {
+        int priority = 100;
+        Map<String, String> ageOffOptions = new HashMap<>();
+        for (Entry<String, Integer> e : config.getMetricAgeOffDays().entrySet()) {
+            String ageoff = Long.toString(e.getValue() * 86400000L);
+            ageOffOptions.put(MetricAgeOffFilter.AGE_OFF_PREFIX + e.getKey(), ageoff);
+        }
+        IteratorSetting ageOffIteratorSettings = new IteratorSetting(priority, "ageoff", MetricAgeOffFilter.class,
+                ageOffOptions);
+        connector.tableOperations().attachIterator(tableName, ageOffIteratorSettings, AGEOFF_SCOPES);
     }
 
     @Override
@@ -392,6 +395,10 @@ public class DataStoreImpl implements DataStore {
         }
         result.setTags(tags);
         result.setLimit(msg.getLimit());
+        Map<String, Pattern> tagPatterns = new HashMap<>();
+        tags.forEach((k, v) -> {
+            tagPatterns.put(k, Pattern.compile(v));
+        });
         try {
             List<Result> resultField = new ArrayList<>();
             Scanner scanner = connector.createScanner(metaTable, Authorizations.EMPTY);
@@ -399,11 +406,11 @@ public class DataStoreImpl implements DataStore {
             Key end = start.followingKey(PartialKey.ROW);
             Range range = new Range(start, end);
             scanner.setRange(range);
-            // TODO compute columns to fetch
+            tags.keySet().forEach(k -> scanner.fetchColumnFamily(new Text(k)));
             int total = 0;
             for (Entry<Key, Value> entry : scanner) {
                 Meta metaEntry = Meta.parse(entry.getKey(), entry.getValue());
-                if (matches(metaEntry.getTagKey(), metaEntry.getTagValue(), tags)) {
+                if (matches(metaEntry.getTagKey(), metaEntry.getTagValue(), tagPatterns)) {
                     if (resultField.size() < msg.getLimit()) {
                         Result r = new Result();
                         r.putTag(metaEntry.getTagKey(), metaEntry.getTagValue());
@@ -423,12 +430,9 @@ public class DataStoreImpl implements DataStore {
         return result;
     }
 
-    private boolean matches(String tagk, String tagv, Map<String, String> tags) {
-        // first, match keys...
-        for (Entry<String, String> entry : tags.entrySet()) {
-            String k = entry.getKey();
-            String v = entry.getValue();
-            if (("*".equals(k) || tagk.equals(k)) && ("*".equals(v) || tagv.equals(v))) {
+    private boolean matches(String tagk, String tagv, Map<String, Pattern> tags) {
+        for (Entry<String, Pattern> entry : tags.entrySet()) {
+            if (tagk.equals(entry.getKey()) && entry.getValue().matcher(tagv).matches()) {
                 return true;
             }
         }
@@ -453,6 +457,10 @@ public class DataStoreImpl implements DataStore {
                     Map<String, String> orderedTags = orderTags(tagOrder, query.getTags());
                     setQueryColumns(scanner, metric, orderedTags);
                     long downsample = getDownsamplePeriod(query);
+                    if (((endTs - startTs) / downsample + 1) > Integer.MAX_VALUE) {
+                        throw new IOException(
+                                "Downsample not large enough for time range. Decrease time range or increase downsample period.");
+                    }
                     LOG.trace("Downsample period {}", downsample);
                     Class<? extends Aggregator> aggClass = getAggregator(query);
                     LOG.trace("Aggregator type {}", aggClass.getSimpleName());

@@ -39,7 +39,6 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
-import org.apache.accumulo.core.util.UtilWaitThread;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.Before;
@@ -185,6 +184,7 @@ public class WebSocketIT extends OneWaySSLBase {
     @Before
     public void setup() throws Exception {
         s = new Server(conf);
+        s.run();
         this.sessionId = UUID.randomUUID().toString();
         AuthCache.getCache().put(sessionId, new UsernamePasswordAuthenticationToken("test", "test1"));
         group = new NioEventLoopGroup();
@@ -211,7 +211,7 @@ public class WebSocketIT extends OneWaySSLBase {
         ch = boot.connect("127.0.0.1", WS_PORT).sync().channel();
         // Wait until handshake is complete
         while (!handshaker.isHandshakeComplete()) {
-            UtilWaitThread.sleep(500L);
+            sleepUninterruptibly(500, TimeUnit.MILLISECONDS);
             LOG.debug("Waiting for Handshake to complete");
         }
     }
@@ -243,7 +243,7 @@ public class WebSocketIT extends OneWaySSLBase {
             List<String> response = handler.getResponses();
             while (response.size() == 0 && handler.isConnected()) {
                 LOG.info("Waiting for web socket response");
-                UtilWaitThread.sleep(500L);
+                sleepUninterruptibly(500, TimeUnit.MILLISECONDS);
                 response = handler.getResponses();
             }
 
@@ -303,7 +303,7 @@ public class WebSocketIT extends OneWaySSLBase {
             List<String> response = handler.getResponses();
             while (response.size() == 0 && handler.isConnected()) {
                 LOG.info("Waiting for web socket response");
-                UtilWaitThread.sleep(500L);
+                sleepUninterruptibly(500, TimeUnit.MILLISECONDS);
                 response = handler.getResponses();
             }
 
@@ -342,7 +342,7 @@ public class WebSocketIT extends OneWaySSLBase {
             response = handler.getResponses();
             while (response.size() == 0 && handler.isConnected()) {
                 LOG.info("Waiting for web socket response");
-                UtilWaitThread.sleep(500L);
+                sleepUninterruptibly(500, TimeUnit.MILLISECONDS);
                 response = handler.getResponses();
             }
 
@@ -384,7 +384,7 @@ public class WebSocketIT extends OneWaySSLBase {
             response = handler.getResponses();
             while (response.size() == 0 && handler.isConnected()) {
                 LOG.info("Waiting for web socket response");
-                UtilWaitThread.sleep(500L);
+                sleepUninterruptibly(500, TimeUnit.MILLISECONDS);
                 response = handler.getResponses();
             }
             first = new Metric();
@@ -464,7 +464,7 @@ public class WebSocketIT extends OneWaySSLBase {
             List<String> response = handler.getResponses();
             while (response.size() == 0 && handler.isConnected()) {
                 LOG.info("Waiting for web socket response");
-                UtilWaitThread.sleep(500L);
+                sleepUninterruptibly(500, TimeUnit.MILLISECONDS);
                 response = handler.getResponses();
             }
             Assert.assertEquals(1, response.size());
@@ -486,7 +486,7 @@ public class WebSocketIT extends OneWaySSLBase {
             List<String> response = handler.getResponses();
             while (response.size() == 0 && handler.isConnected()) {
                 LOG.info("Waiting for web socket response");
-                UtilWaitThread.sleep(500L);
+                sleepUninterruptibly(500, TimeUnit.MILLISECONDS);
                 response = handler.getResponses();
             }
             Assert.assertEquals(1, response.size());
@@ -534,7 +534,7 @@ public class WebSocketIT extends OneWaySSLBase {
             List<String> response = handler.getResponses();
             while (response.size() == 0 && handler.isConnected()) {
                 LOG.info("Waiting for web socket response");
-                UtilWaitThread.sleep(500L);
+                sleepUninterruptibly(500, TimeUnit.MILLISECONDS);
                 response = handler.getResponses();
             }
             assertEquals(1, response.size());
@@ -573,7 +573,7 @@ public class WebSocketIT extends OneWaySSLBase {
             "   \"operation\" : \"lookup\","+
             "   \"metric\" : \"sys.cpu.idle\","+
             "   \"tags\" : ["+
-                   "\"tag3=*\""+
+                   "\"tag3=.*\""+
                 "]"+
     	    "}";
             // @formatter:on
@@ -583,7 +583,7 @@ public class WebSocketIT extends OneWaySSLBase {
             List<String> response = handler.getResponses();
             while (response.size() == 0 && handler.isConnected()) {
                 LOG.info("Waiting for web socket response");
-                UtilWaitThread.sleep(500L);
+                sleepUninterruptibly(500, TimeUnit.MILLISECONDS);
                 response = handler.getResponses();
             }
             assertEquals(1, response.size());
@@ -624,7 +624,7 @@ public class WebSocketIT extends OneWaySSLBase {
             List<String> response = handler.getResponses();
             while (response.size() == 0 && handler.isConnected()) {
                 LOG.info("Waiting for web socket response");
-                UtilWaitThread.sleep(500L);
+                sleepUninterruptibly(500, TimeUnit.MILLISECONDS);
                 response = handler.getResponses();
             }
             assertEquals(1, response.size());
@@ -667,7 +667,7 @@ public class WebSocketIT extends OneWaySSLBase {
             List<String> response = handler.getResponses();
             while (response.size() == 0 && handler.isConnected()) {
                 LOG.info("Waiting for web socket response");
-                UtilWaitThread.sleep(500L);
+                sleepUninterruptibly(500, TimeUnit.MILLISECONDS);
                 response = handler.getResponses();
             }
             assertEquals(1, response.size());

@@ -3,7 +3,7 @@ package timely.store.iterators;
 import org.apache.accumulo.core.data.Key;
 
 /**
- * Subclass of Accumulo Key class that enables us to reset the value of the row. 
+ * Subclass of Accumulo Key class that enables us to reset the value of the row.
  *
  */
 public class WritableKey extends Key {

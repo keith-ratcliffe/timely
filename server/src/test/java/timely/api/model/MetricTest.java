@@ -15,6 +15,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import timely.Configuration;
 import timely.auth.VisibilityCache;
 import timely.util.JsonUtil;
 
@@ -22,7 +23,7 @@ public class MetricTest {
 
     @Before
     public void before() {
-        VisibilityCache.init();
+        VisibilityCache.init(new Configuration());
     }
 
     @Test
@@ -40,9 +41,9 @@ public class MetricTest {
         Mutation mut = m.toMutation();
 
         PairLexicoder<String, Long> rowCoder = new PairLexicoder<>(new StringLexicoder(), new LongLexicoder());
-        byte[] row = rowCoder.encode(new ComparablePair<String, Long>("sys.cpu.user", ts));
-        ByteBuffer bb = ByteBuffer.allocate(Double.BYTES);
-        bb.putDouble(2.0D);
+        byte[] row = rowCoder.encode(new ComparablePair<>("sys.cpu.user", ts));
+        byte[] value = new byte[Double.BYTES];
+        ByteBuffer.wrap(value).putDouble(2.0D);
         Assert.assertEquals(rowCoder.decode(row), rowCoder.decode(mut.getRow()));
         Assert.assertEquals(3, mut.getUpdates().size());
         ColumnUpdate up = mut.getUpdates().get(0);
@@ -50,19 +51,19 @@ public class MetricTest {
         Assert.assertTrue(new String(up.getColumnQualifier()).equals("tag2=value2,tag3=value3"));
         Assert.assertEquals(ts, up.getTimestamp());
         Assert.assertTrue(new String(up.getColumnVisibility()).equals(""));
-        Assert.assertArrayEquals(bb.array(), up.getValue());
+        Assert.assertArrayEquals(value, up.getValue());
         ColumnUpdate up2 = mut.getUpdates().get(1);
         Assert.assertTrue(new String(up2.getColumnFamily()).equals("tag2=value2"));
         Assert.assertTrue(new String(up2.getColumnQualifier()).equals("tag1=value1,tag3=value3"));
         Assert.assertEquals(ts, up2.getTimestamp());
         Assert.assertTrue(new String(up2.getColumnVisibility()).equals(""));
-        Assert.assertArrayEquals(bb.array(), up2.getValue());
+        Assert.assertArrayEquals(value, up.getValue());
         ColumnUpdate up3 = mut.getUpdates().get(2);
         Assert.assertTrue(new String(up3.getColumnFamily()).equals("tag3=value3"));
         Assert.assertTrue(new String(up3.getColumnQualifier()).equals("tag1=value1,tag2=value2"));
         Assert.assertEquals(ts, up3.getTimestamp());
         Assert.assertTrue(new String(up3.getColumnVisibility()).equals(""));
-        Assert.assertArrayEquals(bb.array(), up3.getValue());
+        Assert.assertArrayEquals(value, up.getValue());
     }
 
     @Test
@@ -80,8 +81,8 @@ public class MetricTest {
 
         PairLexicoder<String, Long> rowCoder = new PairLexicoder<>(new StringLexicoder(), new LongLexicoder());
         byte[] row = rowCoder.encode(new ComparablePair<String, Long>("sys.cpu.user", ts));
-        ByteBuffer bb = ByteBuffer.allocate(Double.BYTES);
-        bb.putDouble(2.0D);
+        byte[] value = new byte[Double.BYTES];
+        ByteBuffer.wrap(value).putDouble(2.0D);
         Assert.assertEquals(rowCoder.decode(row), rowCoder.decode(mut.getRow()));
         Assert.assertEquals(1, mut.getUpdates().size());
         ColumnUpdate up = mut.getUpdates().get(0);
@@ -89,7 +90,7 @@ public class MetricTest {
         Assert.assertEquals("", new String(up.getColumnQualifier()));
         Assert.assertEquals(ts, up.getTimestamp());
         Assert.assertEquals("(a&b)|(c&d)", new String(up.getColumnVisibility()));
-        Assert.assertArrayEquals(bb.array(), up.getValue());
+        Assert.assertArrayEquals(value, up.getValue());
     }
 
     @Test

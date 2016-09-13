@@ -19,9 +19,11 @@ import org.apache.commons.lang3.builder.HashCodeBuilder;
 
 import timely.api.annotation.Http;
 import timely.api.annotation.Tcp;
+import timely.api.annotation.Udp;
 import timely.api.annotation.WebSocket;
 import timely.api.request.HttpPostRequest;
 import timely.api.request.TcpRequest;
+import timely.api.request.UdpRequest;
 import timely.api.request.WebSocketRequest;
 import timely.api.response.MetricResponse;
 import timely.auth.VisibilityCache;
@@ -30,9 +32,10 @@ import timely.util.JsonUtil;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 
 @Tcp(operation = "put")
+@Udp(operation = "put")
 @Http(path = "/api/put")
 @WebSocket(operation = "put")
-public class Metric implements TcpRequest, HttpPostRequest, WebSocketRequest {
+public class Metric implements TcpRequest, HttpPostRequest, WebSocketRequest, UdpRequest {
 
     private static final ThreadLocal<ByteBuffer> BUFFER = new ThreadLocal<ByteBuffer>() {
 
@@ -44,9 +47,9 @@ public class Metric implements TcpRequest, HttpPostRequest, WebSocketRequest {
 
     private static final PairLexicoder<String, Long> rowCoder = new PairLexicoder<>(new StringLexicoder(),
             new LongLexicoder());
+
     public static final ColumnVisibility EMPTY_VISIBILITY = new ColumnVisibility();
-    private static final String VISIBILITY_TAG = "viz=";
-    private static final int VISIBILITY_TAG_LENGTH = VISIBILITY_TAG.length();
+    private static final String VISIBILITY_TAG = "viz";
 
     private String metric;
     private long timestamp;
@@ -115,9 +118,10 @@ public class Metric implements TcpRequest, HttpPostRequest, WebSocketRequest {
 
     public Mutation toMutation() {
         final byte[] row = rowCoder.encode(new ComparablePair<String, Long>(this.metric, this.timestamp));
-        BUFFER.get().clear();
-        BUFFER.get().putDouble(this.value);
-        final Value value = new Value(BUFFER.get().array());
+        byte[] b = new byte[Double.BYTES];
+        ByteBuffer bb = ByteBuffer.wrap(b);
+        bb.putDouble(this.value);
+        final Value value = new Value(b);
         final Mutation m = new Mutation(row);
         Collections.sort(tags);
         for (final Tag entry : tags) {
@@ -137,10 +141,8 @@ public class Metric implements TcpRequest, HttpPostRequest, WebSocketRequest {
 
     public static Metric parse(Key k, Value v) {
         ComparablePair<String, Long> row = rowCoder.decode(k.getRow().getBytes());
-        BUFFER.get().clear();
-        BUFFER.get().put(v.get(), 0, v.getSize());
-        BUFFER.get().position(0);
-        Double value = BUFFER.get().getDouble();
+        ByteBuffer bb = ByteBuffer.wrap(v.get());
+        Double value = bb.getDouble();
         Metric m = new Metric();
         m.setMetric(row.getFirst());
         m.setTimestamp(row.getSecond());
@@ -200,8 +202,37 @@ public class Metric implements TcpRequest, HttpPostRequest, WebSocketRequest {
         equals.append(this.metric, other.metric);
         equals.append(this.timestamp, other.timestamp);
         equals.append(this.value, other.value);
-        equals.append(this.tags, other.tags);
-        return equals.isEquals();
+        return equals.isEquals() && this.tags.containsAll(other.tags); // order
+                                                                       // of
+                                                                       // list
+                                                                       // is not
+                                                                       // important
+    }
+
+    public void parseMetric(timely.api.flatbuffer.Metric metric) {
+        List<Tag> tags = new ArrayList<>();
+        for (int i = 0; i < metric.tagsLength(); i++) {
+            timely.api.flatbuffer.Tag t = metric.tags(i);
+            tags.add(new Tag(t.key(), t.value()));
+        }
+        populate(metric.name(), metric.timestamp(), metric.value(), tags);
+    }
+
+    private void populate(String name, long timestamp, double value, List<Tag> tags) {
+        this.setMetric(name);
+        long ts = timestamp;
+        if (ts < 9999999999L) {
+            ts *= 1000;
+        }
+        this.setTimestamp(ts);
+        this.setValue(value);
+        tags.forEach(t -> {
+            if (t.getKey().equals(VISIBILITY_TAG)) {
+                this.setVisibility(VisibilityCache.getColumnVisibility(t.getValue()));
+            } else {
+                this.addTag(t);
+            }
+        });
     }
 
     @Override
@@ -210,23 +241,16 @@ public class Metric implements TcpRequest, HttpPostRequest, WebSocketRequest {
         //
         // put <metricName> <timestamp> <value> <tagK=tagV> <tagK=tagV> ...
         String[] parts = line.split(" ");
-        this.setMetric(parts[1]);
-        long ts = Long.parseLong(parts[2]);
-        if (ts < 9999999999L) {
-            ts *= 1000;
-        }
-        this.setTimestamp(ts);
-        this.setValue(Double.valueOf(parts[3]));
-        String part;
+        String name = parts[1];
+        long timestamp = Long.parseLong(parts[2]);
+        double value = Double.valueOf(parts[3]);
+        List<Tag> tags = new ArrayList<>();
         for (int i = 4; i < parts.length; i++) {
-            part = parts[i];
-            if (part.startsWith(VISIBILITY_TAG) && part.length() > VISIBILITY_TAG_LENGTH) {
-                this.setVisibility(VisibilityCache.getColumnVisibility(part.substring(VISIBILITY_TAG_LENGTH)));
-            } else if (!part.isEmpty()) {
-                this.addTag(new Tag(parts[i]));
+            if (!parts[i].isEmpty()) {
+                tags.add(new Tag(parts[i]));
             }
         }
-
+        populate(name, timestamp, value, tags);
     }
 
     @Override
