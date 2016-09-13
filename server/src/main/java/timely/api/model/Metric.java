@@ -118,10 +118,9 @@ public class Metric implements TcpRequest, HttpPostRequest, WebSocketRequest, Ud
 
     public Mutation toMutation() {
         final byte[] row = rowCoder.encode(new ComparablePair<String, Long>(this.metric, this.timestamp));
-        byte[] b = new byte[Double.BYTES];
-        ByteBuffer bb = ByteBuffer.wrap(b);
-        bb.putDouble(this.value);
-        final Value value = new Value(b);
+        BUFFER.get().clear();
+        BUFFER.get().putDouble(this.value);
+        final Value value = new Value(BUFFER.get().array());
         final Mutation m = new Mutation(row);
         Collections.sort(tags);
         for (final Tag entry : tags) {
@@ -141,8 +140,10 @@ public class Metric implements TcpRequest, HttpPostRequest, WebSocketRequest, Ud
 
     public static Metric parse(Key k, Value v) {
         ComparablePair<String, Long> row = rowCoder.decode(k.getRow().getBytes());
-        ByteBuffer bb = ByteBuffer.wrap(v.get());
-        Double value = bb.getDouble();
+        BUFFER.get().clear();
+        BUFFER.get().put(v.get());
+        BUFFER.get().position(0);
+        Double value = BUFFER.get().getDouble();
         Metric m = new Metric();
         m.setMetric(row.getFirst());
         m.setTimestamp(row.getSecond());
