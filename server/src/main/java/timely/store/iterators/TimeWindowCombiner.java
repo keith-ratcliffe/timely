@@ -17,6 +17,12 @@
 package timely.store.iterators;
 
 import java.io.IOException;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Iterator;
@@ -42,6 +48,7 @@ import org.apache.accumulo.core.iterators.OptionDescriber;
 import org.apache.accumulo.core.iterators.SortedKeyValueIterator;
 import org.apache.accumulo.core.iterators.conf.ColumnSet;
 import org.apache.accumulo.core.util.ComparablePair;
+import org.apache.accumulo.core.util.Pair;
 import org.apache.hadoop.io.Text;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -66,6 +73,9 @@ import com.google.common.collect.Lists;
  */
 public abstract class TimeWindowCombiner implements SortedKeyValueIterator<Key, Value>, OptionDescriber {
 
+    private static final long ONE_HOUR = Duration.ofHours(1).toMillis();
+    private static final long ONE_DAY = Duration.ofDays(1).toMillis();
+
     /**
      * A Java Iterator that returns a Key and Value when the given Key is within
      * the time window.
@@ -77,10 +87,10 @@ public abstract class TimeWindowCombiner implements SortedKeyValueIterator<Key, 
         private final String startMetric;
         private final byte[] startColf;
         private final byte[] startColq;
+        private final Pair<Long, Long> window;
         private boolean hasNext;
-        private long window;
 
-        public TimeWindowValueIterator(LookaheadIterator source, long window) throws IOException {
+        public TimeWindowValueIterator(LookaheadIterator source, Pair<Long, Long> window) throws IOException {
             this.source = source;
             startKey = new Key(source.getTopKey());
             ComparablePair<String, Long> row = Metric.decodeRowKey(startKey.getRow().getBytes());
@@ -100,7 +110,8 @@ public abstract class TimeWindowCombiner implements SortedKeyValueIterator<Key, 
          * @return
          */
         private boolean isInWindow(Key test) {
-            if (!test.isDeleted() && (test.getTimestamp() - this.startKey.getTimestamp()) < this.window) {
+            if (!test.isDeleted()
+                    && (test.getTimestamp() >= this.window.getFirst() && test.getTimestamp() < this.window.getSecond())) {
                 ComparablePair<String, Long> row = Metric.decodeRowKey(test.getRow().getBytes());
                 return (startMetric.equals(row.getFirst())
                         && Arrays.equals(startColf, test.getColumnFamily().getBytes()) && Arrays.equals(startColq, test
@@ -170,6 +181,7 @@ public abstract class TimeWindowCombiner implements SortedKeyValueIterator<Key, 
     private ColumnSet combiners;
     private boolean combineAllColumns;
     private long window = -1L;
+    private Pair<Long, Long> currentWindow = null;
 
     public void setSource(SortedKeyValueIterator<Key, Value> source) {
         this.source = new LookaheadIterator(source);
@@ -197,7 +209,6 @@ public abstract class TimeWindowCombiner implements SortedKeyValueIterator<Key, 
             topValue = null;
         }
         source.next();
-
         findTop();
     }
 
@@ -240,7 +251,8 @@ public abstract class TimeWindowCombiner implements SortedKeyValueIterator<Key, 
                     return;
                 }
                 topKey = workKey;
-                Iterator<KeyValuePair> viter = new TimeWindowValueIterator(source, this.window);
+                this.currentWindow = getCurrentWindow(topKey.getTimestamp());
+                Iterator<KeyValuePair> viter = new TimeWindowValueIterator(source, this.currentWindow);
                 topValue = reduce(topKey, viter);
                 // Consume the rest of the keys
                 while (viter.hasNext()) {
@@ -297,6 +309,9 @@ public abstract class TimeWindowCombiner implements SortedKeyValueIterator<Key, 
         if (!options.containsKey(WINDOW_SIZE)) {
             throw new IllegalArgumentException("options must include " + WINDOW_SIZE);
         }
+        if (!options.get(WINDOW_SIZE).endsWith("d") && !options.get(WINDOW_SIZE).endsWith("h")) {
+            throw new IllegalArgumentException("Only hours and minutes are supported.");
+        }
         this.window = AccumuloConfiguration.getTimeInMillis(options.get(WINDOW_SIZE));
 
         combineAllColumns = false;
@@ -331,6 +346,32 @@ public abstract class TimeWindowCombiner implements SortedKeyValueIterator<Key, 
             combiners = new ColumnSet();
         }
 
+    }
+
+    public static final ZoneId UTC_ZONE = ZoneOffset.UTC.normalized();
+
+    /**
+     * Given a key's timestamp and the window size configured, return the time
+     * range.
+     *
+     * @param keyTimestamp
+     * @return
+     */
+    public Pair<Long, Long> getCurrentWindow(long keyTimestamp) {
+        // Time and remainder are in UTC time zone
+        long remainder = keyTimestamp % this.window;
+        // Baseline to the beginning of the window
+        ZonedDateTime localizedStartTime = ZonedDateTime.ofInstant(Instant.ofEpochMilli(keyTimestamp - remainder),
+                UTC_ZONE);
+        // truncate
+        ZonedDateTime truncatedStartTime = null;
+        if (this.window % ONE_DAY == 0) {
+            truncatedStartTime = localizedStartTime.truncatedTo(ChronoUnit.DAYS);
+        } else if (this.window % ONE_HOUR == 0) {
+            truncatedStartTime = localizedStartTime.truncatedTo(ChronoUnit.HOURS);
+        }
+        long start = truncatedStartTime.toEpochSecond() * 1000;
+        return new Pair<Long, Long>(start, start + this.window);
     }
 
     @Override
@@ -389,6 +430,9 @@ public abstract class TimeWindowCombiner implements SortedKeyValueIterator<Key, 
 
         if (!options.containsKey(WINDOW_SIZE)) {
             throw new IllegalArgumentException("options must include " + WINDOW_SIZE);
+        }
+        if (!options.get(WINDOW_SIZE).endsWith("d") && !options.get(WINDOW_SIZE).endsWith("h")) {
+            throw new IllegalArgumentException("Only hours and minutes are supported.");
         }
         return true;
     }
