@@ -17,7 +17,7 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
 
-import timely.api.model.Metric;
+import timely.adapter.accumulo.MetricAdapter;
 import timely.store.iterators.DataPointsCompactionIterator.DirectByteBufferAllocator;
 
 public class DataPointsCompactionIteratorTest extends IteratorTestBase {
@@ -58,7 +58,7 @@ public class DataPointsCompactionIteratorTest extends IteratorTestBase {
             scratch.clear();
             scratch.putDouble(RANDOM.nextDouble() * RANDOM.nextLong());
             timestamp += 30000;
-            byte[] row = Metric.encodeRowKey(metric, timestamp);
+            byte[] row = MetricAdapter.encodeRowKey(metric, timestamp);
             table.put(new Key(row, colf, colq, viz, timestamp), new Value(scratch.array(), true));
         }
         Assert.assertEquals(1440, table.size());
@@ -123,7 +123,7 @@ public class DataPointsCompactionIteratorTest extends IteratorTestBase {
                 startTimestamp = timestamp;
             }
             if (i != 0 && ((i % 10) == 0)) {
-                byte[] row = Metric.encodeRowKey(metric, startTimestamp);
+                byte[] row = MetricAdapter.encodeRowKey(metric, startTimestamp);
                 byte[] v = DataPointsCompactionIterator.compress(allocator, values);
                 table.put(new Key(row, colf, colq, viz, startTimestamp), new Value(v, true));
                 startTimestamp = -1;
@@ -133,7 +133,7 @@ public class DataPointsCompactionIteratorTest extends IteratorTestBase {
             expected.put(timestamp, i);
             timestamp += 1000;
         }
-        byte[] row = Metric.encodeRowKey(metric, startTimestamp);
+        byte[] row = MetricAdapter.encodeRowKey(metric, startTimestamp);
         byte[] v = DataPointsCompactionIterator.compress(allocator, values);
         table.put(new Key(row, colf, colq, viz, startTimestamp), new Value(v, true));
         Assert.assertEquals(100, table.size());

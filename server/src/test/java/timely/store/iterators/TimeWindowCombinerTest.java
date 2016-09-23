@@ -22,7 +22,7 @@ import org.apache.accumulo.core.util.Pair;
 import org.junit.Assert;
 import org.junit.Test;
 
-import timely.api.model.Metric;
+import timely.adapter.accumulo.MetricAdapter;
 
 public class TimeWindowCombinerTest extends IteratorTestBase {
 
@@ -123,7 +123,7 @@ public class TimeWindowCombinerTest extends IteratorTestBase {
             scratch.putLong(i);
             scratch.flip();
             timestamp += 3600000;
-            byte[] row = Metric.encodeRowKey(metric, timestamp);
+            byte[] row = MetricAdapter.encodeRowKey(metric, timestamp);
             table.put(new Key(row, colf, colq, viz, timestamp), new Value(scratch.array(), true));
         }
         Assert.assertEquals(36, table.size());

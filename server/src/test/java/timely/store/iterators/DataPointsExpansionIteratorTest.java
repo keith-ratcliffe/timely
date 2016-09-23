@@ -13,7 +13,7 @@ import org.apache.accumulo.core.iterators.SortedMapIterator;
 import org.junit.Assert;
 import org.junit.Test;
 
-import timely.api.model.Metric;
+import timely.adapter.accumulo.MetricAdapter;
 
 public class DataPointsExpansionIteratorTest extends IteratorTestBase {
 
@@ -26,7 +26,7 @@ public class DataPointsExpansionIteratorTest extends IteratorTestBase {
         final byte[] colf = "host=r01n01".getBytes(StandardCharsets.UTF_8);
         final byte[] colq = "rack=r01".getBytes(StandardCharsets.UTF_8);
         final byte[] viz = new byte[0];
-        byte[] row = Metric.encodeRowKey(metric, timestamp);
+        byte[] row = MetricAdapter.encodeRowKey(metric, timestamp);
         // Create a byte array with one Double
         ByteBuffer b = ByteBuffer.allocate(Double.BYTES);
         b.putDouble(5.0D);
@@ -60,7 +60,7 @@ public class DataPointsExpansionIteratorTest extends IteratorTestBase {
         long timestamp = System.currentTimeMillis();
         long startTimestamp = timestamp;
         final String metric = "sys.cpu.user";
-        byte[] startRow = Metric.encodeRowKey(metric, timestamp);
+        byte[] startRow = MetricAdapter.encodeRowKey(metric, timestamp);
         final byte[] colf = "host=r01n01".getBytes(StandardCharsets.UTF_8);
         final byte[] colq = "rack=r01".getBytes(StandardCharsets.UTF_8);
         final byte[] viz = new byte[0];
@@ -68,7 +68,7 @@ public class DataPointsExpansionIteratorTest extends IteratorTestBase {
         for (double i = 0; i < iterations; i++) {
             scratch.putLong(timestamp);
             scratch.putDouble(i);
-            byte[] row = Metric.encodeRowKey(metric, timestamp);
+            byte[] row = MetricAdapter.encodeRowKey(metric, timestamp);
             expected.put(new Key(row, colf, colq, viz, timestamp), i);
             timestamp += 1000;
         }

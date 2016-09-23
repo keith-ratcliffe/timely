@@ -10,7 +10,7 @@ import org.apache.accumulo.core.iterators.SortedMapIterator;
 import org.junit.Assert;
 import org.junit.Test;
 
-import timely.api.model.Metric;
+import timely.adapter.accumulo.MetricAdapter;
 
 public class LookaheadIteratorTest extends IteratorTestBase {
 
@@ -30,7 +30,7 @@ public class LookaheadIteratorTest extends IteratorTestBase {
 
         for (long i = 0; i < 10; i++) {
             timestamp += 1000;
-            byte[] row = Metric.encodeRowKey(metric, timestamp);
+            byte[] row = MetricAdapter.encodeRowKey(metric, timestamp);
             table.put(new Key(row, colf, colq, viz, timestamp), emptyValue);
         }
 

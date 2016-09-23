@@ -4,4 +4,9 @@
     <Package name="timely.api.flatbuffer"/>
     <Class name="timely.store.iterators.WritableKey"/>
   </Or>
+  <Match>
+    <Class name="timely.Server" />
+    <Method name="shutdown" />
+    <Bug pattern="UC_USELESS_OBJECT" />
+  </Match>
 </FindBugsFilter>

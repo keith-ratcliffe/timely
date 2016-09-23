@@ -11,7 +11,7 @@ import org.apache.accumulo.core.data.Value;
 import org.apache.accumulo.core.iterators.WrappingIterator;
 import org.apache.accumulo.core.util.Pair;
 
-import timely.api.model.Metric;
+import timely.adapter.accumulo.MetricAdapter;
 
 /**
  * Accumulo Iterator that expands the compacted Metric timestamps and values at
@@ -79,8 +79,8 @@ public class DataPointsExpansionIterator extends WrappingIterator {
         } else if (data.remaining() >= TIME_VALUE_LENGTH) {
             // This should be a Timestamp following by a metric value
             Long timestamp = data.getLong();
-            Pair<String, Long> r = Metric.decodeRowKey(workKey.getRow().getBytes());
-            workKey.setRow(Metric.encodeRowKey(r.getFirst(), timestamp));
+            Pair<String, Long> r = MetricAdapter.decodeRowKey(workKey.getRow().getBytes());
+            workKey.setRow(MetricAdapter.encodeRowKey(r.getFirst(), timestamp));
             workKey.setTimestamp(timestamp);
             key = workKey;
             metricValue.clear();

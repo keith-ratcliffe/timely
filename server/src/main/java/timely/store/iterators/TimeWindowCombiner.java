@@ -53,7 +53,7 @@ import org.apache.hadoop.io.Text;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import timely.api.model.Metric;
+import timely.adapter.accumulo.MetricAdapter;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Splitter;
@@ -93,7 +93,7 @@ public abstract class TimeWindowCombiner implements SortedKeyValueIterator<Key, 
         public TimeWindowValueIterator(LookaheadIterator source, Pair<Long, Long> window) throws IOException {
             this.source = source;
             startKey = new Key(source.getTopKey());
-            ComparablePair<String, Long> row = Metric.decodeRowKey(startKey.getRow().getBytes());
+            ComparablePair<String, Long> row = MetricAdapter.decodeRowKey(startKey.getRow().getBytes());
             this.startMetric = row.getFirst();
             this.startColf = startKey.getColumnFamily().getBytes();
             this.startColq = startKey.getColumnQualifier().getBytes();
@@ -112,7 +112,7 @@ public abstract class TimeWindowCombiner implements SortedKeyValueIterator<Key, 
         private boolean isInWindow(Key test) {
             if (!test.isDeleted()
                     && (test.getTimestamp() >= this.window.getFirst() && test.getTimestamp() < this.window.getSecond())) {
-                ComparablePair<String, Long> row = Metric.decodeRowKey(test.getRow().getBytes());
+                ComparablePair<String, Long> row = MetricAdapter.decodeRowKey(test.getRow().getBytes());
                 return (startMetric.equals(row.getFirst())
                         && Arrays.equals(startColf, test.getColumnFamily().getBytes()) && Arrays.equals(startColq, test
                         .getColumnQualifier().getBytes()));
@@ -369,6 +369,8 @@ public abstract class TimeWindowCombiner implements SortedKeyValueIterator<Key, 
             truncatedStartTime = localizedStartTime.truncatedTo(ChronoUnit.DAYS);
         } else if (this.window % ONE_HOUR == 0) {
             truncatedStartTime = localizedStartTime.truncatedTo(ChronoUnit.HOURS);
+        } else {
+            throw new RuntimeException("Error truncating start time: " + localizedStartTime);
         }
         long start = truncatedStartTime.toEpochSecond() * 1000;
         return new Pair<Long, Long>(start, start + this.window);
