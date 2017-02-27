@@ -1,6 +1,6 @@
 package qonduit.operations.version;
 
-import qonduit.operations.OperationResponse;
+import qonduit.operation.OperationResponse;
 
 public class VersionResponse extends OperationResponse {
 

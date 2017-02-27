@@ -1,6 +1,6 @@
 package qonduit.operations.version;
 
-import qonduit.operations.OperationRequest;
+import qonduit.operation.OperationRequest;
 
 public class VersionRequest extends OperationRequest {
 

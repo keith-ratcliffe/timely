@@ -1,4 +1,4 @@
-package qonduit.operations;
+package qonduit.operation;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 

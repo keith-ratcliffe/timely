@@ -19,7 +19,7 @@
       <directory>${project.build.directory}</directory>
       <outputDirectory>lib</outputDirectory>
       <includes>
-        <include>qonduit*.jar</include>
+        <include>*.jar</include>
       </includes>
     </fileSet>
     <fileSet>

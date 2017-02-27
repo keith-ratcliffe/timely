@@ -1,6 +1,6 @@
 package qonduit.operations.scanner;
 
-import qonduit.operations.OperationResponse;
+import qonduit.operation.OperationResponse;
 
 public class KVPair extends OperationResponse {
 

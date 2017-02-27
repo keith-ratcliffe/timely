@@ -2,7 +2,7 @@ package qonduit.operations.scanner;
 
 import java.util.List;
 
-import qonduit.operations.OperationRequest;
+import qonduit.operation.OperationRequest;
 import qonduit.utils.ByteArrayUtils;
 
 public class ScanRequest extends OperationRequest {
